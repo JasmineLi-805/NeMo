@@ -27,4 +27,4 @@ with open(read_file_name, 'r') as file:
             pred = pred.upper()
             line['text'] = pred
             
-            out_file.write(str(line) + '\n')
+            out_file.write(json.dumps(line) + '\n')
