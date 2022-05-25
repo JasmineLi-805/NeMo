@@ -21,7 +21,7 @@ with open(read_file_name, 'r') as file:
                 continue
             line = json.loads(line)
             
-            path = line['audio_filepath'].replace('/Nemo','')
+            path = line['audio_filepath'].replace('/NeMo','')
             line['audio_filepath'] = path
             
             pred = pypinyin.pinyin(line['text'], style=pypinyin.Style.NORMAL, neutral_tone_with_five=True)
