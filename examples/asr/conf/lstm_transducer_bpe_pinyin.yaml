@@ -27,7 +27,7 @@ model:
   train_ds:
     manifest_filepath: ???
     sample_rate: ${model.sample_rate}
-    batch_size: 16 # you may increase batch_size if your memory allows
+    batch_size: 24 # you may increase batch_size if your memory allows
     shuffle: true
     num_workers: 4
     pin_memory: true
@@ -46,7 +46,7 @@ model:
   validation_ds:
     manifest_filepath: ???
     sample_rate: ${model.sample_rate}
-    batch_size: 16
+    batch_size: 24
     shuffle: false
     num_workers: 4
     pin_memory: true
@@ -55,7 +55,7 @@ model:
   test_ds:
     manifest_filepath: null
     sample_rate: ${model.sample_rate}
-    batch_size: 16
+    batch_size: 24
     shuffle: false
     num_workers: 4
     pin_memory: true
@@ -82,9 +82,9 @@ model:
   spec_augment:
     _target_: nemo.collections.asr.modules.SpectrogramAugmentation
     freq_masks: 2 # set to zero to disable it
-    time_masks: 10 # set to zero to disable it
-    freq_width: 27
-    time_width: 0.05
+    time_masks: 2 # set to zero to disable it
+    freq_width: 10 
+    time_width: 50 
 
   encoder:
     _target_: nemo.collections.asr.modules.RNNEncoder
@@ -168,7 +168,7 @@ model:
 
   optim:
     name: adamw
-    lr: 5.0
+    lr: 0.625
     # optimizer arguments
     betas: [0.9, 0.98]
     weight_decay: 1e-2
@@ -193,9 +193,9 @@ trainer:
   accumulate_grad_batches: 1
   gradient_clip_val: 0.3
   precision: 32 # Should be set to 16 for O1 and O2 to enable the AMP.
-  log_every_n_steps: 10  # Interval of logging.
+  log_every_n_steps: 200  # Interval of logging.
   progress_bar_refresh_rate: 10
-  resume_from_checkpoint: null # The path to a checkpoint file to continue the training, restores the whole state including the epoch, step, LR schedulers, apex, etc.
+  resume_from_checkpoint: '/home/jasmine/NeMo/nemo_experiments/LSTM-Transducer-BPE/T007/checkpoints/LSTM-Transducer-BPE--val_wer=0.0666-epoch=29-last.ckpt' # The path to a checkpoint file to continue the training, restores the whole state including the epoch, step, LR schedulers, apex, etc.
   num_sanity_val_steps: 0 # number of steps to perform validation steps for sanity check the validation process before starting the training, setting to 0 disables it
   check_val_every_n_epoch: 1 # number of evaluations on validation every n epochs
   sync_batchnorm: true
