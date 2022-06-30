@@ -29,8 +29,10 @@ class StackingSubsampling(torch.nn.Module):
     def __init__(self, subsampling_factor, feat_in, feat_out):
         super(StackingSubsampling, self).__init__()
         self.subsampling_factor = subsampling_factor
-        self.proj_out = torch.nn.Linear(subsampling_factor * feat_in, feat_out)
-
+#         self.proj_out = torch.nn.Linear(subsampling_factor * feat_in, feat_out)
+        self.proj_out = nn.Sequential(torch.nn.Linear(subsampling_factor * feat_in, feat_out),nn.ReLU())
+        print('use ReLU in Stacking')
+        
     def forward(self, x, lengths):
         b, t, h = x.size()
         pad_size = (self.subsampling_factor - (t % self.subsampling_factor)) % self.subsampling_factor

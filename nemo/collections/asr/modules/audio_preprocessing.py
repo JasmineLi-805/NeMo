@@ -227,6 +227,7 @@ class AudioToMelSpectrogramPreprocessor(AudioPreprocessor):
         rng=None,
         nb_augmentation_prob=0.0,
         nb_max_freq=4000,
+        SI_PCEN_tau=None,
     ):
         super().__init__(n_window_size, n_window_stride)
 
@@ -268,9 +269,16 @@ class AudioToMelSpectrogramPreprocessor(AudioPreprocessor):
             nb_augmentation_prob=nb_augmentation_prob,
             nb_max_freq=nb_max_freq,
         )
+        self.SI_PCEN_tau = SI_PCEN_tau
 
     def get_features(self, input_signal, length):
-        return self.featurizer(input_signal, length)
+        if self.SI_PCEN_tau is None:
+            return self.featurizer(input_signal, length)
+        else:
+            input_signal, length = self.featurizer(input_signal, length)
+#             print(input_signal.shape)
+#             print(length)
+            return SI_PCEN(input_signal), length - 1
 
     @property
     def filter_banks(self):
@@ -413,6 +421,19 @@ class AudioToMFCCPreprocessor(AudioPreprocessor):
         seq_len = torch.ceil(length.to(torch.float32) / self.hop_length).to(dtype=torch.long)
         return features, seq_len
 
+def SI_PCEN(data,tau=0.05):
+    log_mel = data #[B,C,T]
+    T = data.shape[-1]
+
+    cum_frame = log_mel[:,:,0:1]
+    x_norm_list = []
+    for i in range(1,T):
+        cur_frame = log_mel[:,:,i:i+1]
+        cum_frame = (1-tau)*cum_frame + tau*cur_frame
+        x_norm = cur_frame - cum_frame
+        x_norm_list.append(x_norm)
+    x_norm = torch.cat(x_norm_list,dim=2)
+    return x_norm
 
 class SpectrogramAugmentation(NeuralModule):
     """

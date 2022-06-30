@@ -18,6 +18,8 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
+import torch.nn as nn
+from sru import SRU
 
 from nemo.utils import logging
 
@@ -117,6 +119,115 @@ def rnn(
             )
         )
 
+class BasicNorm(nn.Module):
+    def __init__(self,dim,eps_init=np.log(0.25)):
+        #Basic norm layer from improved Conformer
+        super().__init__()
+        self.eps = nn.Parameter(torch.tensor([eps_init]).float())
+        
+    def forward(self,x):
+        #x [B, T, C]
+        x_norm = (x.var(-1,keepdim=True) + self.eps.exp()).sqrt()
+        return x/x_norm
+
+class DQNorm(nn.Module):
+    def __init__(self,dim,eps=1e-6):
+        super().__init__()
+        #normalization layer that's similar to dynamic quantization...
+        self.eps = eps
+    
+    def forward(self,x):
+        #x [B, T, C]
+        #substract mean over channel, then divide by maximum of absolute value
+        x = x - x.mean(-1,keepdim=True)
+        x = x/(x.abs().max(-1,keepdim=True)[0] + self.eps)
+        return x
+    
+class Permute_Layer(nn.Module):
+    def __init__(self,n_dim):
+        super().__init__()
+        self.register_buffer('perm',torch.randperm(n_dim))
+    def forward(self,x):
+        #x[B,T,C]
+        return x[:,:,self.perm]
+    
+class MSCausalDWConv1D(nn.Module):
+    def __init__(self,n_chan,ks):
+        super().__init__()
+        conv_list = []
+        for k in ks:
+            conv_list.append(nn.Conv1d(
+            n_chan,
+            n_chan,
+            k, 
+            stride=1, 
+            padding=0,
+            bias=False,
+            groups=n_chan
+            ))
+        self.conv = nn.ModuleList(conv_list)
+        self.act = nn.ReLU()
+        self.k = max(ks)
+    def forward(self,x):
+        #x [B,T,C]
+        x = x.transpose(1,2)
+        T = x.shape[-1]
+        x = nn.functional.pad(x,(self.k-1,0))
+        
+        conv_out = 0
+        for conv in self.conv:
+            conv_out += self.act(conv(x)[:,:,-T:])
+#             conv_out = conv(x)[:,:,-T:]
+#         conv_out = self.act(conv_out)
+        return conv_out.transpose(1,2)
+        
+class CausalDWConv1D(nn.Module):
+    def __init__(self,n_chan,k):
+        super().__init__()
+        self.conv = nn.Conv1d(
+        n_chan,
+        n_chan,
+        k, 
+        stride=1, 
+        padding=0,
+        bias=False,
+        groups=n_chan
+        )
+        self.act = nn.ReLU()
+        self.k = k
+    def forward(self,x):
+        #x [B,T,C]
+        x = x.transpose(1,2)
+        T = x.shape[-1]
+        x = nn.functional.pad(x,(self.k-1,0))
+        x = self.act(self.conv(x))[:,:,-T:].transpose(1,2)
+        
+        return x
+    
+class My_SRU(nn.Module):
+    def __init__(self,in_chan,rnn_dim,num_layers,layer_norm=True,dropout=0.0,proj_size=0.0,hkpf_shape=None,bidirectional=False,):
+        super().__init__()
+        self.rnn = SRU(in_chan, rnn_dim, 
+                       num_layers = num_layers,          # number of stacking RNN la
+                        dropout = dropout,           # dropout applied between RNN layers
+                        bidirectional = bidirectional,   # bidirectional RNN
+                        layer_norm = layer_norm,      # apply layer normalization on the output of each layer
+                        highway_bias = 0,        # initial bias of highway gate (<= 0)
+                        projection_size = proj_size,
+                        hkpf_shape = hkpf_shape,
+                        use_tanh = False,
+                        has_skip_term = True,
+                        rescale = False,
+                    )
+    def flatten_parameters(self):
+        pass
+    
+    def forward(self,x,hid=None):
+        #x [B,T,C] but model only support [T,B,C]
+        x = x.transpose(0,1)
+        x, hid = self.rnn(x,hid)
+        x = x.transpose(0,1)
+        return x, hid
 
 class OverLastDim(torch.nn.Module):
     """Collapses a tensor to 2D, applies a module, and (re-)expands the tensor.

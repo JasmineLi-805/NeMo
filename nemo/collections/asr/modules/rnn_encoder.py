@@ -19,6 +19,7 @@ import torch.distributed
 import torch.nn as nn
 
 from nemo.collections.asr.parts.submodules.subsampling import ConvSubsampling, StackingSubsampling
+from nemo.collections.common.parts.rnn import My_SRU, Permute_Layer, DQNorm, BasicNorm, CausalDWConv1D, MSCausalDWConv1D
 from nemo.core.classes.common import typecheck
 from nemo.core.classes.exportable import Exportable
 from nemo.core.classes.module import NeuralModule
@@ -128,7 +129,7 @@ class RNNEncoder(NeuralModule, Exportable):
 
         self.layers = nn.ModuleList()
 
-        SUPPORTED_RNN = {"lstm": nn.LSTM, "gru": nn.GRU, "rnn": nn.RNN}
+        SUPPORTED_RNN = {"lstm": nn.LSTM, "gru": nn.GRU, "rnn": nn.RNN, "sru": My_SRU}
         if rnn_type not in SUPPORTED_RNN:
             raise ValueError(f"rnn_type can be one from the following:{SUPPORTED_RNN.keys()}")
         else:
@@ -145,10 +146,25 @@ class RNNEncoder(NeuralModule, Exportable):
                     bidirectional=bidirectional,
                     proj_size=rnn_proj_size,
                 )
+            if rnn_type == 'sru':
+                layer = rnn_module(
+                    self._feat_out,
+                    rnn_proj_size,
+                    1,
+                    layer_norm=True,
+                    dropout=0.0,
+                    proj_size=0,
+                    bidirectional=bidirectional
+                )
             self.layers.append(layer)
-            self.layers.append(nn.LayerNorm(proj_size))
+            self.layers.append(MSCausalDWConv1D(proj_size,[4,8,16]))
+#             self.layers.append(nn.ReLU())
+#             self.layers.append(nn.LayerNorm(proj_size))
+#             self.layers.append(Permute_Layer(proj_size))
             self.layers.append(nn.Dropout(p=dropout))
             self._feat_out = proj_size
+        self.layers.append(nn.LayerNorm(proj_size,elementwise_affine=False))
+#         self.layers.append(nn.ReLU())
 
     @typecheck()
     def forward(self, audio_signal, length=None):
